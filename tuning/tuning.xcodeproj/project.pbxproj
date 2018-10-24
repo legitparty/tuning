@@ -1,0 +1,100 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 50;
+	objects = {
+
+/* Begin PBXFileReference section */
+		B5CAB2F0217C3DEC003241EB /* reverb.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = reverb.sh; path = ../reverb.sh; sourceTree = "<group>"; };
+		B5CAB2F1217C3DEC003241EB /* linearcomma.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = linearcomma.py; path = ../linearcomma.py; sourceTree = "<group>"; };
+		B5CAB2F2217C3DEC003241EB /* tonelib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tonelib.py; path = ../tonelib.py; sourceTree = "<group>"; };
+		B5CAB2F3217C3DEC003241EB /* patches.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = patches.py; path = ../patches.py; sourceTree = "<group>"; };
+		B5CAB2F4217C3DEC003241EB /* tunelib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tunelib.py; path = ../tunelib.py; sourceTree = "<group>"; };
+		B5CAB2F5217C3DEC003241EB /* tone.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tone.py; path = ../tone.py; sourceTree = "<group>"; };
+		B5CAB2F6217C3DEC003241EB /* midi.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = midi.py; path = ../midi.py; sourceTree = "<group>"; };
+		B5CAB2F7217C3DEC003241EB /* tune.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tune.py; path = ../tune.py; sourceTree = "<group>"; };
+		B5CAB2F8217C3DEC003241EB /* linearbeat.scl */ = {isa = PBXFileReference; lastKnownFileType = text; name = linearbeat.scl; path = ../linearbeat.scl; sourceTree = "<group>"; };
+		B5CAB2F9217C3DEC003241EB /* thagorus.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = thagorus.py; path = ../thagorus.py; sourceTree = "<group>"; };
+		B5CAB2FA217C3DEC003241EB /* tone.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = tone.sh; path = ../tone.sh; sourceTree = "<group>"; };
+		B5CAB2FB217C3DEC003241EB /* midilib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = midilib.py; path = ../midilib.py; sourceTree = "<group>"; };
+		B5CAB2FC217C3DEC003241EB /* linearwell.scl */ = {isa = PBXFileReference; lastKnownFileType = text; name = linearwell.scl; path = ../linearwell.scl; sourceTree = "<group>"; };
+		B5CAB2FD217C3DEC003241EB /* tune.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = tune.sh; path = ../tune.sh; sourceTree = "<group>"; };
+		B5CAB2FE217C3DEC003241EB /* raw.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = raw.sh; path = ../raw.sh; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		B5CAB2E9217C3D28003241EB = {
+			isa = PBXGroup;
+			children = (
+				B5CAB2F8217C3DEC003241EB /* linearbeat.scl */,
+				B5CAB2F1217C3DEC003241EB /* linearcomma.py */,
+				B5CAB2FC217C3DEC003241EB /* linearwell.scl */,
+				B5CAB2F6217C3DEC003241EB /* midi.py */,
+				B5CAB2FB217C3DEC003241EB /* midilib.py */,
+				B5CAB2F3217C3DEC003241EB /* patches.py */,
+				B5CAB2FE217C3DEC003241EB /* raw.sh */,
+				B5CAB2F0217C3DEC003241EB /* reverb.sh */,
+				B5CAB2F9217C3DEC003241EB /* thagorus.py */,
+				B5CAB2F5217C3DEC003241EB /* tone.py */,
+				B5CAB2FA217C3DEC003241EB /* tone.sh */,
+				B5CAB2F2217C3DEC003241EB /* tonelib.py */,
+				B5CAB2F7217C3DEC003241EB /* tune.py */,
+				B5CAB2FD217C3DEC003241EB /* tune.sh */,
+				B5CAB2F4217C3DEC003241EB /* tunelib.py */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXProject section */
+		B5CAB2EA217C3D28003241EB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 1000;
+			};
+			buildConfigurationList = B5CAB2ED217C3D28003241EB /* Build configuration list for PBXProject "tuning" */;
+			compatibilityVersion = "Xcode 9.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = B5CAB2E9217C3D28003241EB;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		B5CAB2EE217C3D28003241EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		B5CAB2EF217C3D28003241EB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B5CAB2ED217C3D28003241EB /* Build configuration list for PBXProject "tuning" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B5CAB2EE217C3D28003241EB /* Debug */,
+				B5CAB2EF217C3D28003241EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B5CAB2EA217C3D28003241EB /* Project object */;
+}

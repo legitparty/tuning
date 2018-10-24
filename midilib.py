@@ -585,8 +585,8 @@ class Channels:
         if self.on_notes:
             #print self.on_notes
             #tuned = WellTuner()
-            tuned = LinearWellTuner()
-            #tuned = Linear5Tuner()
+            #tuned = LinearWellTuner()
+            tuned = Linear5Tuner()
             #tuned = Tuner(self.last_tuning)
             for note in self.on_notes:
                 tuned.addNote(note - middle_c)
@@ -610,7 +610,7 @@ class Channels:
         if self.on_notes != notes:
             self.on_notes = notes
             self.tuneNotes()
-        self.syncReleases()
+        #self.syncReleases()
         #print ", ".join(notename(n) for n in self.on_notes)
         
 
@@ -714,49 +714,37 @@ class Note:
     def updateTuning(self, sampler, f, seconds):
         self.f = f
         if self.tone:
-            errlog("old tone")
             self.tone.updateFrequency(self.f)
         else:
-            errlog("new tone")
-            self.tone = sampler.newTone(f, seconds, self.pan)
+            self.tone = sampler.newTone(f, self.pan, seconds)
 
     def cleanup(self):
         if self.tone:
             self.tone.remove()
-        else:
-            errlog("panic remove")
 
-    def syncRelease(self):
-        errlog("syncRelease %s %s" % (id(self.tone.partials[0] if self.tone and self.tone.partials else None), self.ref_count))
-        if self.ref_count == 0:
-            self.off_time = self.event.time
-            self.off_velocity = self.event.velocity
-            if self.tone:
-                self.tone.release()
-            else:
-                errlog("panic release")
-	elif self.ref_count == -1:
-		errlog("panic release ref count %i" % self.ref_count)
-        else:
-            self.on_time = self.event.time
-            self.on_velocity = self.event.velocity
-            self.off_time = None
-            self.off_velocity = 0
-            if self.tone:
-                self.tone.unrelease()
-            else:
-                errlog("panic unrelease")
+    def release(self):
+        self.off_time = self.event.time
+        self.off_velocity = self.event.velocity
+        if self.tone:
+            self.tone.release()
+
+    def unrelease(self):
+        self.on_time = self.event.time
+        self.on_velocity = self.event.velocity
+        self.off_time = None
+        self.off_velocity = 0
+        if self.tone:
+            self.tone.unrelease()
 
     def inc(self, n):
         self.ref_count += 1
         self.event = n
-        errlog("inc %s %s" % (id(self.tone.partials[0]) if self.tone and self.tone.partials else None, self.ref_count))
-        
+        self.unrelease()
+
     def dec(self, n):
         self.ref_count -= 1
         self.event = n
-        errlog("dec %s %s" % (id(self.tone.partials[0] if self.tone and self.tone.partials else None), self.ref_count))
-            
+        self.release()
 
     def __init__(self, n, pan):
         self.event = None
@@ -890,7 +878,7 @@ class Channel:
             note = self.notes[n]
             if not (note.off_time is None):
                 #print "note %i is released" % n
-                if t - note.off_time > 240:
+                if t - note.off_time and note.tone is not None and note.tone.finished():
                     #print "note %i is off" % n
                     note.cleanup()
                     to_remove.append(n)

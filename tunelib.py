@@ -170,7 +170,7 @@ class LinearTuner(TwelveTuner):
     }
 
 class Linear5Tuner(TwelveTuner):
-    A = 440
+    A = 415
     
     # Even Temperament
     # 5ths kept in octave, offset linear -0.0015222627465 (7153/4698926)

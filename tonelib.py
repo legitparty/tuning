@@ -71,7 +71,10 @@ class Decay:
                 return self.sample_volume
         else:
             if self.rate != 1.0:
-                return log(self.rate) / (log(self.rate) * self.rate ** (second - self.start_second.get()))
+                try:
+                    return log(self.rate) / (log(self.rate) * self.rate ** (second - self.start_second.get()))
+                except OverflowError:
+                    return 0.0
             else:
                 return 1.0
 
@@ -125,15 +128,17 @@ class BasePartial:
 
     class Releasing: pass
     class Attacking: pass
+    class Reattacking: pass
     class Lifted: pass
     class Pressed: pass
 
     def __init__(self, intensity = 1.0, decay_rate = 0.0, delay = 0.0, release_floor_db = None):
+        from collections import deque
         # public state
+        self.ref_count = 1
+        self.pending_attack = True
+        self.pending_release = False
         self.delay = delay
-        
-        self.attack_now = True
-        self.release_now = False
         self.state = self.Lifted
         
         self.decay_rate = decay_rate
@@ -149,51 +154,75 @@ class BasePartial:
             depth = 16
             release_floor_db = -(log(2 ** (2 * depth)) / log(10)) * 10
         self.floor = db_ratio(release_floor_db)
-        errlog("Noise floor: " + str(self.floor))
 
         # private state
         self.last_cycle = 0.0
         self.last_second = 0.0
-                
 
     # private
 
     def lift(self):
         errlog("lift %s %s" % (id(self), self.state))
-        if not self.state is self.Lifted:
-            self.release_now = True
-        
+        self.pending_release = True
+        self.ref_count -= 1
+
     def unlift(self):
         errlog("unlift %s %s" % (id(self), self.state))
-        if not self.state is self.Pressed:
-            self.attack_now = True
-            if self.state is self.Pressed:
-                self.release_now = True
-        
+        self.pending_attack = True
+        self.ref_count += 1
+
+    def actuate(self, frequency, second):
+        from collections import deque
+        has_attack  = self.pending_attack
+        self.pending_attack = False
+        has_release = self.pending_release
+        self.pending_release = False
+
+        if self.ref_count > 0:
+            if has_attack:
+                if self.state is self.Lifted:
+                    self.hammer_down(frequency, second)
+                elif self.state is self.Pressed:
+                    self.hammer_up(frequency, second)
+                    self.state = self.Reattacking
+                elif self.state is self.Releasing:
+                    self.state = self.Reattacking
+                # else is already attacking
+            else:
+                if self.state is self.Lifted:
+                    # should at least be attacked
+                    self.hammer_down(frequency, second)
+                # else let hammer actions continue
+
+        elif self.ref_count <= 0:
+            if has_release:
+                if self.state is self.Pressed:
+                    self.hammer_up(frequency, second)
+                elif self.state is self.Reattacking:
+                    self.state = self.Releasing
+                # self.Lifted and self.Releasing are already releasing or released
+            else:
+                if self.state is self.Pressed:
+                    # should at least be released
+                    self.hammer_up(frequency, second)
+                # else let hammer actions continue
+
     def hammer_up(self, frequency, second):
-        errlog(self.state)
         self.state = self.Releasing
         errlog("hammer_up %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + 1.0 / frequency))
+        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + 5.0 / frequency))
 
     def hammer_down(self, frequency, second):
-        errlog(self.state)
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + 1.0 / frequency))
+        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + 5.0 / frequency))
         self.sustain = Decay(self.decay_rate, Second(second + self.delay + 1.0 / frequency))
         
     def force(self, frequency, second):
-        if self.release_now and self.state is self.Pressed:
-            self.release_now = False
-            self.hammer_up(frequency, second)
-        elif self.attack_now and self.state is self.Lifted:
-            self.attack_now = False
-            self.hammer_down(frequency, second)
-            
-
+        self.actuate(frequency, second)
+    
         if self.state is self.Lifted:
             self.last_cycle = 0
             self.last_second = second
@@ -203,6 +232,8 @@ class BasePartial:
         elif self.state is self.Attacking:
             return self.attack(frequency, second)
         elif self.state is self.Releasing:
+            return self.release(frequency, second)
+        elif self.state is self.Reattacking:
             return self.release(frequency, second)
 
         
@@ -218,10 +249,14 @@ class BasePartial:
         v = self.release_fade.fade_out(second)
         if v == 0.0:
             errlog(self.state)
-            self.state = self.Lifted
-            errlog("lifted %s %s %s %s" % (frequency, second, id(self), self.state))
-            self.last_cycle = 0
-            self.last_second = second
+            if self.state is self.Reattacking:
+                self.hammer_down(frequency, second)
+                errlog("reattacking %s %s %s %s" % (frequency, second, id(self), self.state))
+            else:
+                self.state = self.Lifted
+                errlog("lifted %s %s %s %s" % (frequency, second, id(self), self.state))
+                self.last_cycle = 0
+                self.last_second = second
         return v
 
     def cycle(self, second, frequency):
@@ -232,31 +267,18 @@ class BasePartial:
 
     def wave(self, second, frequency, volume):
         from math import sin, pi
-        """
-        if second > self.attack_fade.end_second.get() and second < self.release_fade.start_second.get() and volume <= db_ratio(self.floor):
-            self.release_fade = Fade(Second(second))
-            import sys
-            sys.stderr.write("passed floor\n")
-            sys.stderr.write("%s < %s and %s <= %s\n" % (second, self.release_fade.start_second.get(), volume, db_ratio(self.floor)))
-            sys.stderr.flush()
-        """
-            
+        
         if volume > self.floor:
             return sin(pi * 2 * self.cycle(second, frequency)) * volume
         else:
             if not self.hit_floor:
                 errlog("Dropping partial that hit the floor.")
                 self.hit_floor = True
-            #self.cycle(second, frequency)
             return 0.0
 
     def volume(self, second, frequency, nyquist):
         if frequency <= nyquist:
-            existence = self.force(frequency, second)
-            if existence > 0.0:
-                return self.intensity * (self.sustain.decay(second) if not self.sustain is None else 0.0) * existence
-            else:
-                return 0.0
+            return self.intensity * self.force(frequency, second) * (self.sustain.decay(second) if self.sustain is not None else 1.0)
         else:
             return 0.0
                 
@@ -344,31 +366,34 @@ class SawtoothWave(SimplePartial):
 
 class SynthProperties:
     def __init__(self, frequency = 256.0, channel_pan = 0.0, attack_volume = 1.0, channel_volume = 1.0):
-        self.initial_gain = 1.0 / 5000
-        #self.initial_gain = 1.0 / 10
         self.octave_gain = -0.0
-	self.odd_only = True
-	
+
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
     
-       	"""
-	self.enharmonic_width = 0.02 # 2 cm at 512
+       	""""""
+        self.odd_only = False
+        self.initial_gain = 1.0 / 10
+        self.enharmonic_width = 0.02 # 2 cm at 512
 
-        self.max_harmonic = None
-
+        self.max_harmonic = 12
+        self.inharmonicity = (frequency - 4) / frequency
+        
         self.plucked_harmonic = 7.0
         self.pluck_dampening = 1.0
 
-        self.decay_db = 4.0
+        self.decay_db = 2.0
         self.harmonic_decay_db = 1.0/4
-        self.harmonic_decay_dampening = 2.0
+        self.harmonic_decay_dampening = 4.0
         """
-	
-	self.enharmonic_width = 0.0
+        self.odd_only = True
+        self.initial_gain = 1.0 / 5000
+
+        self.enharmonic_width = 0.0
         
-        self.max_harmonic = 16
+        self.max_harmonic = 8
+        self.inharmonicity = 0.0
 
         self.plucked_harmonic = 1000.0
         self.pluck_dampening = 1.0
@@ -376,7 +401,7 @@ class SynthProperties:
         self.decay_db = 0.0
         self.harmonic_decay_db = 0.0
         self.harmonic_decay_dampening = 1.5
-	""""""
+        """
 
 	self.octave_modulo = False
 
@@ -395,17 +420,8 @@ class SynthProperties:
 
         self.gain = self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
 
-        self.position_x = self.octave_position * self.octave_width + self.channel_pan * 1 # meters
+        self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4 # meters
         self.position_y = 0.2 # meters
-        errlog("Key at:")
-        errlog("\t" + str(self.position_y) + "m forward")
-        if self.position_x > 0:
-            errlog("\t" + str(self.position_x) + "m right")
-        elif self.position_x < 0:
-            errlog("\t" + str(-self.position_x) + "m left")
-        else:
-            errlog("\tdirectly ahead")
-        
         
         self.ear_distance = 0.02 # meters
         
@@ -413,17 +429,9 @@ class SynthProperties:
         
         self.left_distance  = ((self.position_x - self.ear_distance / 2) ** 2 + self.position_y ** 2) ** 0.5
         self.right_distance = ((self.position_x + self.ear_distance / 2) ** 2 + self.position_y ** 2) ** 0.5       
-        errlog("\t" + str(self.left_distance)  + "m from the left ear")
-        errlog("\t" + str(self.right_distance) + "m from the right ear")
         
         self.left_delay  = self.left_distance  / self.sound_speed
         self.right_delay = self.right_distance / self.sound_speed
-        if self.left_delay    > self.right_delay:
-            errlog("\t" + str(self.left_delay - self.right_delay) + " right before left")
-        elif self.right_delay > self.left_delay:
-            errlog("\t" + str(self.right_delay - self.left_delay) + " left before right")
-        else:
-            errlog("\twithout delay difference")
 	    
 	self.left_intensity  = 1.0 / self.left_distance  ** 2
 	self.right_intensity = 1.0 / self.right_distance ** 2
@@ -501,11 +509,14 @@ class SynthTone(BaseTone):
     def unrelease(self):
         for partial in self.partials:
             partial.unlift()
-    
+
+    def finished(self):
+        return self.partials[0].state is BasePartial.Lifted
+
     def remove(self):
         self.sampler.remove(self)
     
-    def __init__(self, sampler, frequency, nyquist, channel, start = None, stop = None, properties = None, pan = 0.0):
+    def __init__(self, sampler, frequency, nyquist, channel, pan = 0.0, start = None, stop = None, properties = None):
         self.sampler = sampler
         self.id = self.synth_id
         SynthTone.synth_id += 1
@@ -534,6 +545,9 @@ class SynthTone(BaseTone):
         max_partials = int(float(self.nyquist) / self.frequency)
         for harmonic in range(1, max_partials):
             harmonic_frequency = self.frequency * harmonic
+            if harmonic % 2 == 0:
+                harmonic_frequency -= self.frequency * self.properties.inharmonicity
+            
             if harmonic_frequency > self.nyquist:
                 break
                 
@@ -547,16 +561,14 @@ class SynthTone(BaseTone):
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay)) 
             self.partials.append(SimplePartial(self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
             
-        errlog(volume)
-
 class SynthSampler(BaseSampler):
     def __init__(self, channel = 0, sample_rate = 48000, sample_depth = 16, sample_packing = "h"):
         BaseSampler.__init__(self, sample_rate, sample_depth, sample_packing)
         self.channel = channel
         self.tones = {}
 
-    def newTone(self, frequency, start, stop = None, properties = None):
-        tone = SynthTone(self, frequency, self.nyquist, self.channel, start, stop, properties)
+    def newTone(self, frequency, pan, start, stop = None, properties = None):
+        tone = SynthTone(self, frequency, self.nyquist, self.channel, pan, start, stop, properties)
         self.tones[tone.id] = tone
         return tone
         
