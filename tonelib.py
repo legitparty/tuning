@@ -53,7 +53,6 @@ class Decay:
 
     def __init__(self, dbps, start_second):
         self.start_second = start_second
-        errlog(self.start_second)
         self.dbps = dbps
         self.rate = db_ratio(dbps)
         self.sample_decay = None
@@ -132,9 +131,10 @@ class BasePartial:
     class Lifted: pass
     class Pressed: pass
 
-    def __init__(self, intensity = 1.0, decay_rate = 0.0, delay = 0.0, release_floor_db = None):
+    def __init__(self, properties, intensity = 1.0, decay_rate = 0.0, delay = 0.0, release_floor_db = None):
         from collections import deque
         # public state
+        self.properties = properties
         self.ref_count = 1
         self.pending_attack = True
         self.pending_release = False
@@ -161,13 +161,16 @@ class BasePartial:
 
     # private
 
+    def finished(self):
+        return self.state is self.Lifted and not self.pending_attack
+    
     def lift(self):
-        errlog("lift %s %s" % (id(self), self.state))
+        #errlog("lift %s %s" % (id(self), self.state))
         self.pending_release = True
         self.ref_count -= 1
 
     def unlift(self):
-        errlog("unlift %s %s" % (id(self), self.state))
+        #errlog("unlift %s %s" % (id(self), self.state))
         self.pending_attack = True
         self.ref_count += 1
 
@@ -211,13 +214,13 @@ class BasePartial:
         self.state = self.Releasing
         errlog("hammer_up %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + 5.0 / frequency))
+        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.release_cycles / frequency))
 
     def hammer_down(self, frequency, second):
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + 5.0 / frequency))
+        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.attack_cycles / frequency))
         self.sustain = Decay(self.decay_rate, Second(second + self.delay + 1.0 / frequency))
         
     def force(self, frequency, second):
@@ -240,7 +243,7 @@ class BasePartial:
     def attack(self, frequency, second):    
         v = self.attack_fade.fade_in(second)
         if v == 1.0:
-            errlog(self.state)
+            #errlog(self.state)
             self.state = self.Pressed
             errlog("pressed %s %s %s %s" % (frequency, second, id(self), self.state))
         return v
@@ -248,7 +251,7 @@ class BasePartial:
     def release(self, frequency, second):            
         v = self.release_fade.fade_out(second)
         if v == 0.0:
-            errlog(self.state)
+            #errlog(self.state)
             if self.state is self.Reattacking:
                 self.hammer_down(frequency, second)
                 errlog("reattacking %s %s %s %s" % (frequency, second, id(self), self.state))
@@ -299,9 +302,10 @@ class BaseTone:
 
 class BaseSampler:
     def __init__(self, sample_rate = 48000, sample_depth = 16, sample_packing = "h"):
+        from struct import Struct
         self.rate = sample_rate
         self.depth = sample_depth
-        self.packing = sample_packing
+        self.packing = Struct(sample_packing)
         
         self.nyquist = self.rate / 2
         self.cardinality = 1 << self.depth
@@ -309,16 +313,15 @@ class BaseSampler:
 
     def signed_sample(self, i):
         return int(((self.sum_values(float(i) / self.rate, self.nyquist) + 1) / 2 * (self.cardinality - 1) - (self.cardinality / 2)) + .5)
-        
+
     def sample(self, i):
-        import struct
-        return struct.pack(self.packing, self.signed_sample(i))
+        return self.packing.pack(self.signed_sample(i))
         
 class SimplePartial(BasePartial):
-    def __init__(self, f, h, v = 1.0, db = 0.0, delay = 0.0):
+    def __init__(self, properties, f, h, v = 1.0, db = 0.0, delay = 0.0):
         if db > 30: db = 30
         #errlog(db)
-        BasePartial.__init__(self, v, db, delay)
+        BasePartial.__init__(self, properties, v, db, delay)
         self.base_frequency = f
         self.harmonic = h
         
@@ -372,7 +375,7 @@ class SynthProperties:
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
     
-       	""""""
+       	"""
         self.odd_only = False
         self.initial_gain = 1.0 / 10
         self.enharmonic_width = 0.02 # 2 cm at 512
@@ -382,6 +385,9 @@ class SynthProperties:
         
         self.plucked_harmonic = 7.0
         self.pluck_dampening = 1.0
+        
+        self.attack_cycles = 5.0
+        self.release_cycles = 5.0
 
         self.decay_db = 2.0
         self.harmonic_decay_db = 1.0/4
@@ -398,10 +404,13 @@ class SynthProperties:
         self.plucked_harmonic = 1000.0
         self.pluck_dampening = 1.0
 
+        self.attack_cycles = 25.0
+        self.release_cycles = 25.0
+        
         self.decay_db = 0.0
         self.harmonic_decay_db = 0.0
         self.harmonic_decay_dampening = 1.5
-        """
+        """"""
 
 	self.octave_modulo = False
 
@@ -511,7 +520,7 @@ class SynthTone(BaseTone):
             partial.unlift()
 
     def finished(self):
-        return self.partials[0].state is BasePartial.Lifted
+        return self.partials[0].finished()
 
     def remove(self):
         self.sampler.remove(self)
@@ -559,7 +568,7 @@ class SynthTone(BaseTone):
             
             harmonic_decay = self.properties.harmonic_decay(harmonic)
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay)) 
-            self.partials.append(SimplePartial(self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
+            self.partials.append(SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
             
 class SynthSampler(BaseSampler):
     def __init__(self, channel = 0, sample_rate = 48000, sample_depth = 16, sample_packing = "h"):
@@ -575,7 +584,10 @@ class SynthSampler(BaseSampler):
     def remove(self, tone):
         if tone.id in self.tones:
             del self.tones[tone.id]
-        
+
+    def remaining(self):
+        return not self.tones
+
     def sum_values(self, seconds, nyquist):
         if self.tones:
             #errlog(sorted(tone.frequency for tone in self.tones.values()))

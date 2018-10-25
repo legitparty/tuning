@@ -544,7 +544,7 @@ class Channels:
 
     def remaining(self):
         return not self.q.empty()
-
+            
     def updateTime(self, s):
         delta = s - self.s
         self.s = s
@@ -717,6 +717,8 @@ class Note:
             self.tone.updateFrequency(self.f)
         else:
             self.tone = sampler.newTone(f, self.pan, seconds)
+    def finished(self):
+        return self.off_time is not None and self.tone and self.tone.finished()
 
     def cleanup(self):
         if self.tone:
@@ -876,9 +878,12 @@ class Channel:
         to_remove = []
         for n in self.notes:
             note = self.notes[n]
+            """
             if not (note.off_time is None):
                 #print "note %i is released" % n
                 if t - note.off_time and note.tone is not None and note.tone.finished():
+                """
+            if note.finished():
                     #print "note %i is off" % n
                     note.cleanup()
                     to_remove.append(n)
