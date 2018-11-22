@@ -17,6 +17,16 @@ has_clipped = False
 clipping = False
 max_v = 1.0
 
+def init_rand():
+    import random
+    global entropy
+    entropy = [random.random() for i in range(100000)]
+
+init_rand()
+
+def rand(second):
+    return entropy[int(second * 1000000) % 100000]
+
 def clipped(v):
     v = abs(v)
     global max_v, clipping, has_clipped
@@ -135,12 +145,12 @@ class BasePartial:
         from collections import deque
         # public state
         self.properties = properties
-        self.ref_count = 1
-        self.pending_attack = True
+        self.ref_count = 0
+        self.pending_attack = False
         self.pending_release = False
         self.delay = delay
         self.state = self.Lifted
-        
+
         self.decay_rate = decay_rate
         self.sustain = None
         self.attack_fade = None
@@ -165,17 +175,16 @@ class BasePartial:
         return self.state is self.Lifted and not self.pending_attack
     
     def lift(self):
-        #errlog("lift %s %s" % (id(self), self.state))
+        errlog("lift %s %s %i - 1" % (id(self), self.state, self.ref_count))
         self.pending_release = True
         self.ref_count -= 1
 
     def unlift(self):
-        #errlog("unlift %s %s" % (id(self), self.state))
+        errlog("unlift %s %s %i + 1" % (id(self), self.state, self.ref_count))
         self.pending_attack = True
         self.ref_count += 1
 
     def actuate(self, frequency, second):
-        from collections import deque
         has_attack  = self.pending_attack
         self.pending_attack = False
         has_release = self.pending_release
@@ -214,14 +223,14 @@ class BasePartial:
         self.state = self.Releasing
         errlog("hammer_up %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.release_cycles / frequency))
+        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.release_cycles / self.base_frequency))
 
     def hammer_down(self, frequency, second):
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.attack_cycles / frequency))
-        self.sustain = Decay(self.decay_rate, Second(second + self.delay + 1.0 / frequency))
+        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.attack_cycles / self.base_frequency))
+        self.sustain = Decay(self.decay_rate, Second(second + self.delay))
         
     def force(self, frequency, second):
         self.actuate(frequency, second)
@@ -246,6 +255,10 @@ class BasePartial:
             #errlog(self.state)
             self.state = self.Pressed
             errlog("pressed %s %s %s %s" % (frequency, second, id(self), self.state))
+            if self.ref_count <= 0:
+                errlog("!!!! PANIC ref_count, trying to recover by lifting the hammer.")
+                # attack overlapped deref... bring up the hammer
+                self.hammer_up(frequency, second)
         return v
 
     def release(self, frequency, second):            
@@ -271,13 +284,30 @@ class BasePartial:
     def wave(self, second, frequency, volume):
         from math import sin, pi
         
-        if volume > self.floor:
-            return sin(pi * 2 * self.cycle(second, frequency)) * volume
-        else:
+        if volume <= self.floor:
             if not self.hit_floor:
                 errlog("Dropping partial that hit the floor.")
                 self.hit_floor = True
             return 0.0
+
+        if self.properties.chiff_volume > 0.0:
+            if self.state is self.Attacking:
+                jitter_fade = self.attack_fade.fade_in(second) * self.attack_fade.fade_out(second)
+            elif self.state is self.Releasing:
+                jitter_fade = self.release_fade.fade_in(second) * self.release_fade.fade_out(second)
+            else:
+                jitter_fade = 0.0
+                
+            if jitter_fade > 0:
+                cycle_jitter = rand(second) * self.properties.chiff_cycle
+                
+                jitter = sin(pi * 2 * self.cycle(second + cycle_jitter, frequency)) * jitter_fade * self.properties.chiff_volume
+            else:
+                jitter = 0.0
+        else:
+            jitter = 0.0
+        
+        return (jitter + sin(pi * 2 * self.cycle(second, frequency))) * volume
 
     def volume(self, second, frequency, nyquist):
         if frequency <= nyquist:
@@ -318,12 +348,21 @@ class BaseSampler:
         return self.packing.pack(self.signed_sample(i))
         
 class SimplePartial(BasePartial):
-    def __init__(self, properties, f, h, v = 1.0, db = 0.0, delay = 0.0):
+    def __init__(self, properties, f, h, v = 1.0, db = 0.0, delay = 0.0, ref_count = 0):
         if db > 30: db = 30
         #errlog(db)
         BasePartial.__init__(self, properties, v, db, delay)
         self.base_frequency = f
         self.harmonic = h
+        if ref_count > 0:
+            for i in range(ref_count):
+                self.unlift()
+                        
+        if ref_count < 0:
+            for i in range(-ref_count):
+                self.lift()
+
+
         
     def updateBaseFrequency(self, f):
         self.base_frequency = f
@@ -368,64 +407,28 @@ class SawtoothWave(SimplePartial):
             return 0.0
 
 class SynthProperties:
-    def __init__(self, frequency = 256.0, channel_pan = 0.0, attack_volume = 1.0, channel_volume = 1.0):
-        self.octave_gain = -0.0
+    from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
 
+    def __init__(self, frequency = 256.0, channel_pan = 0.0, attack_volume = 1.0, channel_volume = 1.0):
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
-    
-       	"""
-        self.odd_only = False
-        self.initial_gain = 1.0 / 10
-        self.enharmonic_width = 0.02 # 2 cm at 512
-
-        self.max_harmonic = 12
-        self.inharmonicity = (frequency - 4) / frequency
-        
-        self.plucked_harmonic = 7.0
-        self.pluck_dampening = 1.0
-        
-        self.attack_cycles = 5.0
-        self.release_cycles = 5.0
-
-        self.decay_db = 2.0
-        self.harmonic_decay_db = 1.0/4
-        self.harmonic_decay_dampening = 4.0
-        """
-        self.odd_only = True
-        self.initial_gain = 1.0 / 5000
-
-        self.enharmonic_width = 0.0
-        
-        self.max_harmonic = 8
-        self.inharmonicity = 0.0
-
-        self.plucked_harmonic = 1000.0
-        self.pluck_dampening = 1.0
-
-        self.attack_cycles = 25.0
-        self.release_cycles = 25.0
-        
-        self.decay_db = 0.0
-        self.harmonic_decay_db = 0.0
-        self.harmonic_decay_dampening = 1.5
-        """"""
-
-	self.octave_modulo = False
 
         self.octave_width = 0.165
 
-        self.frequency_x = 256.0
+        self.frequency_x = 415.0
 
         from math import log
         self.octave_position = (log(float(frequency) / self.frequency_x) / log(2))
+        
+        if self.inharmonicity_dynamic:
+            self.inharmonicity_coefficient *= (1.0 + abs(self.octave_position))
 
-	if self.octave_modulo:
-		from math import floor
-        	self.attack_dampening = 1 + floor(self.octave_position) / 6
-	else:
-	        self.attack_dampening = 1 + self.octave_position / 6
+        if self.octave_modulo:
+            from math import floor
+            self.attack_dampening = self.tonal_dampening + floor(self.octave_position) * self.octave_dampening
+        else:
+	        self.attack_dampening = self.tonal_dampening + self.octave_position * self.octave_dampening
 
         self.gain = self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
 
@@ -436,14 +439,14 @@ class SynthProperties:
         
         self.sound_speed = 343.174 # meters per second
         
-        self.left_distance  = ((self.position_x - self.ear_distance / 2) ** 2 + self.position_y ** 2) ** 0.5
-        self.right_distance = ((self.position_x + self.ear_distance / 2) ** 2 + self.position_y ** 2) ** 0.5       
+        self.left_distance  = ((self.position_x - self.ear_distance / 2) ** 2 + self.position_y ** 2)
+        self.right_distance = ((self.position_x + self.ear_distance / 2) ** 2 + self.position_y ** 2)
         
         self.left_delay  = self.left_distance  / self.sound_speed
         self.right_delay = self.right_distance / self.sound_speed
 	    
-	self.left_intensity  = 1.0 / self.left_distance  ** 2
-	self.right_intensity = 1.0 / self.right_distance ** 2
+        self.left_intensity  = 1.0 / self.left_distance  ** 2
+        self.right_intensity = 1.0 / self.right_distance ** 2
 	
         from math import atan, pi
         self.pan_position = atan(self.octave_position / 20) / pi * 2
@@ -495,67 +498,137 @@ class SynthProperties:
     
     def harmonic_decay(self, harmonic):
         return self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
-                
+
+class PluckedStringProperties(SynthProperties):
+    octave_gain = -0.0
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    
+    odd_only = False
+    initial_gain = 1.0 / 10
+    
+    max_harmonic = 64
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
+    inharmonicity_dynamic = True
+    
+    plucked_harmonic = 7.0
+    pluck_dampening = 1.0
+    
+    attack_cycles = 1.0
+    release_cycles = 1.0
+    
+    tonal_dampening = 1.1
+    octave_dampening = 0.025
+    octave_modulo = False
+    
+    decay_db = 0.0
+    harmonic_decay_db = 1.0
+    harmonic_decay_dampening = 0.0
+
+class BlownPipeProperties(SynthProperties):
+    octave_gain = -0.0
+    chiff_cycle = 1.0/384
+    chiff_volume = 5.0/10
+    
+    odd_only = True
+    initial_gain = 1.0 / 5000
+    
+    enharmonic_width = 0.0
+    
+    max_harmonic = 32
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_3rd_harmonic
+    inharmonicity_dynamic = False
+    
+    plucked_harmonic = 1000.0
+    pluck_dampening = 1.0
+    
+    attack_cycles  = 7.5
+    release_cycles = 3.0
+    
+    tonal_dampening = 1.4
+    octave_dampening = 1.0/8
+    octave_modulo = True
+    
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    harmonic_decay_dampening = 0.0
+
 class SynthTone(BaseTone):
     synth_id = 0
     
-    def updateFrequency(self, f):
-        if f != self.frequency:
+    def updateFrequency(self, frequency):
+        if self.frequency is None:
+            self.frequency = frequency
+            self.init_partials(frequency)
+
+        if frequency != self.frequency:
             for partial in self.partials:
                 #if not partial.state is partial.Pressed:
-                partial.updateBaseFrequency(f)
+                partial.updateBaseFrequency(frequency)
 
     def updatePan(self, p):
         if p != self.pan:
             for partial in self.partials:
                 #if not partial.state is partial.Pressed:
-                partial.updatePan(f)
+                partial.updatePan(p)
             
-    def release(self, end = None):
+    def release(self):
+        self.ref_count -= 1
         for partial in self.partials:
             partial.lift()
             
     def unrelease(self):
+        self.ref_count += 1
         for partial in self.partials:
             partial.unlift()
 
     def finished(self):
-        return self.partials[0].finished()
+        if self.partials:
+            return self.partials[0].finished()
+        else:
+            return False
 
     def remove(self):
         self.sampler.remove(self)
     
-    def __init__(self, sampler, frequency, nyquist, channel, pan = 0.0, start = None, stop = None, properties = None):
+    def __init__(self, sampler, nyquist, audio_channel, midi_channel, panning = 0.0, start = None, stop = None, property_class = SynthProperties):
         self.sampler = sampler
         self.id = self.synth_id
         SynthTone.synth_id += 1
         
-        self.frequency = frequency
-        self.pan = pan
+        self.frequency = None
+        self.panning = panning
         self.nyquist = nyquist
+        self.audio_channel = audio_channel
+	self.midi_channel = midi_channel
         self.start = start
         self.stop = stop
-        self.properties = properties if properties else SynthProperties(frequency, self.pan)
+        self.property_class = property_class
+
+        self.ref_count = 0
+
+        self.partials = []
+
+    def init_partials(self, frequency):
+        self.properties = self.property_class(frequency, self.panning)
         self.delay = {
             0: self.properties.left_delay,
             1: self.properties.right_delay,
-        }[channel]
+        }[self.audio_channel]
         self.pan = {
             0: self.properties.left_pan,
             1: self.properties.right_pan,
-        }[channel]
-        
-        self.init_partials()
-        
-    def init_partials(self):
+        }[self.audio_channel]
+
         self.partials = []
         
         volume = 0.0
         max_partials = int(float(self.nyquist) / self.frequency)
         for harmonic in range(1, max_partials):
-            harmonic_frequency = self.frequency * harmonic
-            if harmonic % 2 == 0:
-                harmonic_frequency -= self.frequency * self.properties.inharmonicity
+            if self.properties.inharmonicity_coefficient > 0.0:
+                harmonic_frequency = self.frequency * harmonic * (1.0 + 0.5 * (harmonic ** 2 - 1) * self.properties.inharmonicity_coefficient)
+            else:
+                harmonic_frequency = self.frequency * harmonic
             
             if harmonic_frequency > self.nyquist:
                 break
@@ -568,16 +641,16 @@ class SynthTone(BaseTone):
             
             harmonic_decay = self.properties.harmonic_decay(harmonic)
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay)) 
-            self.partials.append(SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
+            self.partials.append(SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay, self.ref_count))
             
 class SynthSampler(BaseSampler):
-    def __init__(self, channel = 0, sample_rate = 48000, sample_depth = 16, sample_packing = "h"):
+    def __init__(self, audio_channel = 0, sample_rate = 48000, sample_depth = 16, sample_packing = "h"):
         BaseSampler.__init__(self, sample_rate, sample_depth, sample_packing)
-        self.channel = channel
+        self.audio_channel = audio_channel
         self.tones = {}
 
-    def newTone(self, frequency, pan, start, stop = None, properties = None):
-        tone = SynthTone(self, frequency, self.nyquist, self.channel, pan, start, stop, properties)
+    def newTone(self, midi_channel, frequency, pan, start, stop = None, property_class = SynthProperties):
+        tone = SynthTone(self, self.nyquist, self.audio_channel, midi_channel, pan, start, stop, property_class)
         self.tones[tone.id] = tone
         return tone
         

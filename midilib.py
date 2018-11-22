@@ -53,49 +53,49 @@ dictstr = lambda s: (s.__class__.__name__  + ": " if hasattr(s, "__class__") els
 
 class ChannelEvent:
     class NoteOff:
-        def __init__(self, t, channel, note, velocity):
+        def __init__(self, t, midi_channel, note, velocity):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.note = note
             self.velocity = velocity
             
     class NoteOn:
-        def __init__(self, t, channel, note, velocity):
+        def __init__(self, t, midi_channel, note, velocity):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.note = note
             self.velocity = velocity
     
     class NoteAftertouch:
-        def __init__(self, t, channel, note, pressure):
+        def __init__(self, t, midi_channel, note, pressure):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.note = note
             self.pressure = pressure
     
     class Controller:    
-        def __init__(self, t, channel, control, value):
+        def __init__(self, t, midi_channel, control, value):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.control = control
             self.value = value
     
     class ProgramChange:
-        def __init__(self, t, channel, program, unused):
+        def __init__(self, t, midi_channel, program, unused):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.program = program
             
     class ChannelAftertouch:
-        def __init__(self, t, channel, pressure, unused):
+        def __init__(self, t, midi_channel, pressure, unused):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.pressure = pressure
     
     class PitchBend:
-        def __init__(self, t, channel, lsb, msb):
+        def __init__(self, t, midi_channel, lsb, msb):
             self.time = t
-            self.channel = channel
+            self.midi_channel = midi_channel
             self.lsb = lsb
             self.msb = msb
             self.value = (float(self.lsb|(self.msb<<7)) / 8192) - 1
@@ -110,14 +110,14 @@ class ChannelEvent:
         0xE: PitchBend,
     }
 
-    def __init__(self, t, message_type, channel, arg1, arg2):
+    def __init__(self, t, message_type, midi_channel, arg1, arg2):
         self.time = t
         self.message_type = message_type
-        self.channel = channel
+        self.midi_channel = midi_channel
         self.arg1 = arg1
         self.arg2 = arg2
         
-        self.event = self.classes.get(self.message_type, lambda a, b, c, d: None)(self.time, self.channel, self.arg1, self.arg2)
+        self.event = self.classes.get(self.message_type, lambda a, b, c, d: None)(self.time, self.midi_channel, self.arg1, self.arg2)
         
 class MetaEvent:
 
@@ -151,7 +151,7 @@ class MetaEvent:
     class Channel(ChannelGeneric):
         def __init__(self, t, bytes):
            self.time = t
-           self.channel = ord(bytes[0])
+           self.midi_channel = ord(bytes[0])
     
     class EndOfTrack(ChannelGeneric):
         def __init__(self, t, bytes):
@@ -559,24 +559,24 @@ class Channels:
 
     def onNotes(self):
         on = []
-        for channel in self.channels:
-            for n in self.channels[channel].notes:
-                note = self.channels[channel].notes[n]
+        for midi_channel in self.channels:
+            for n in self.channels[midi_channel].notes:
+                note = self.channels[midi_channel].notes[n]
                 if note.off_time is None:
                     on.append(n)
                     
         return on
 
     def syncReleases(self):
-        for channel in self.channels:
-            for n in self.channels[channel].notes:
-                note = self.channels[channel].notes[n]
+        for midi_channel in self.channels:
+            for n in self.channels[midi_channel].notes:
+                note = self.channels[midi_channel].notes[n]
                 note.syncRelease()
 
     def syncTunings(self):
-        for channel in self.channels:
-            for n in self.channels[channel].notes:
-                note = self.channels[channel].notes[n]
+        for midi_channel in self.channels:
+            for n in self.channels[midi_channel].notes:
+                note = self.channels[midi_channel].notes[n]
                 if n in self.tunings:
                     note.updateTuning(self.sampler, self.tunings[n], self.s)
 
@@ -586,7 +586,9 @@ class Channels:
             #print self.on_notes
             #tuned = WellTuner()
             #tuned = LinearWellTuner()
-            tuned = Linear5Tuner()
+            #tuned = Linear5Tuner()
+            tuned = StretchTuner()
+            #tuned = EvenTuner()
             #tuned = Tuner(self.last_tuning)
             for note in self.on_notes:
                 tuned.addNote(note - middle_c)
@@ -630,7 +632,7 @@ class Channels:
         pass
 
     def setChannel(self, m):
-        self.meta_channel = m.channel
+        self.meta_channel = m.midi_channel
 
     def setTempo(self, m):
         self.tempo = m
@@ -644,8 +646,7 @@ class Channels:
         self.time_sign = m
 
     meta_switch = {
-        MetaEvent.Channel: setChannel,
-        
+        MetaEvent.Channel:       setChannel,
         MetaEvent.Tempo:         setTempo,
         MetaEvent.KeySignature:  setKey,
         MetaEvent.TimeSignature: setTime,
@@ -662,7 +663,7 @@ class Channels:
             self.meta_switch.get(m.event.__class__, self.noop)(self, m.event)        
         
     def updateChannel(self, c):
-        self.channels[c.event.channel].update(c.event, self.s)
+        self.channels[c.event.midi_channel].update(c.event, self.s)
         
     def updateChannelMeta(self, m):
         self.channels[self.meta_channel].updateMeta(m)
@@ -700,8 +701,8 @@ class Channels:
             zip(
                 range(0, 16),
                 [
-                    Channel(channel)
-                    for channel
+                    Channel(sampler, midi_channel)
+                    for midi_channel
                     in range(0, 16)
                 ]
             )
@@ -713,10 +714,8 @@ class Channels:
 class Note:
     def updateTuning(self, sampler, f, seconds):
         self.f = f
-        if self.tone:
-            self.tone.updateFrequency(self.f)
-        else:
-            self.tone = sampler.newTone(f, self.pan, seconds)
+        self.tone.updateFrequency(self.f)
+
     def finished(self):
         return self.off_time is not None and self.tone and self.tone.finished()
 
@@ -748,15 +747,36 @@ class Note:
         self.event = n
         self.release()
 
-    def __init__(self, n, pan):
+    def __init__(self, channel, f, n, pan, seconds):
         self.event = None
+        self.channel = channel
         self.n = n
         
         self.f = 0
         self.pan = pan
-        
-        self.tone = None
-        
+
+       	property_class = PluckedStringProperties
+
+	program = self.channel.program + 1
+
+	# 1 - 8 Piano
+	# 25 - 32 Guitar
+	if (
+		(program >= 1 and program <= 8)
+	or	(program >= 25 and program <= 32)
+	):
+		property_class = PluckedStringProperties
+
+	# 17 - 24 Organ
+	# 73 - 80 Pipe
+	if (
+		(program >= 17 and program <= 24)
+	or	(program >= 74 and program <= 80)
+	):
+		property_class = BlownPipeProperties
+ 
+        self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None, property_class)
+
         self.ref_count = 0
         
         self.on_time = None
@@ -797,44 +817,38 @@ class Channel:
     toggle_mask = 0x40
 
     def attackNote(self, n, s):
-        #print "attacking note", n.note, "on channel", self.channel, "at", n.time, "with velocity", n.velocity
+        #print "attacking note", n.note, "on channel", self.midi_channel, "at", n.time, "with velocity", n.velocity
+
+        if n.velocity == 0:
+            return self.releaseNote(n, s)
         
         if n.note not in self.notes:
-            e = Note(n.note, self.getControl("pan"))
+            e = Note(self, None, n.note, self.getControl("pan"), s)
             self.notes[n.note] = e
         else:
             e = self.notes[n.note]
             
-        if n.velocity == 0:
-            e.dec(n)
-        else:
-            e.inc(n)
-        #print str(self)
+        e.inc(n)
+            #errlog("attackNote ref_count %i, %i" % (e.ref_count, e.tone.partials[0].ref_count))
             
     
     def releaseNote(self, n, s):
-        #print "releasing note", n.note, "on channel", self.channel, "at", n.time, "with velocity", n.velocity
+        #print "releasing note", n.note, "on channel", self.midi_channel, "at", n.time, "with velocity", n.velocity
         
-        if n.note not in self.notes:
-            e = Note(n.note, self.getControl("pan"))
-            self.notes[n.note] = e
-        else:
+        if n.note in self.notes:
             e = self.notes[n.note]
+            e.dec(n)
+        else:
+            errlog("PANIC !!! attempting to release a note already released")
+
             
-        e.dec(n)
-        #print str(self)
-        
     def updateNoteAftertouch(self, n, s):
-        #print "pressing note", n.note, "on channel", self.channel, "at", n.time, "with pressure", n.aftertouch
+        #print "pressing note", n.note, "on channel", self.midi_channel, "at", n.time, "with pressure", n.aftertouch
         
-        if n.note not in self.notes:
-            e = Note(n.note, self.getControl("pan"))
-            self.notes[n.note] = e
-        else:
+        if n.note in self.notes:
             e = self.notes[n.note]
-            
-        e.touch_time = n.time
-        e.aftertouch = n.aftertouch
+            e.touch_time = n.time
+            e.aftertouch = n.aftertouch
         #print str(self)
         
 
@@ -846,7 +860,7 @@ class Channel:
         elif c.control - self.toggle_mask in self.toggle_map:
             self.toggles[self.toggle_map[c.control - self.toggle_mask]] = c.value > 64 
             
-        #print "channel", c.channel, "control update:", str(c.__dict__), "\n", str(self)
+        #print "channel", c.midi_channel, "control update:", str(c.__dict__), "\n", str(self)
         
     def updateProgram(self, c, s):
         self.program = c.program
@@ -907,18 +921,19 @@ class Channel:
 
     def __str__(self):
         return "Channel %i state:\n\tMeta: %s\n\tInstrument: %s (%i)\n\tAftertouch: %i\n\tControls: \n\t\t%s\n\tToggles: \n\t\t%s\n\tNotes: \n\t\t%s\n\t" % (
-            self.channel,
+            self.midi_channel,
             ", ".join(str(meta) for meta in self.meta),
             patches[self.program],
             self.program,
             self.aftertouch,
             "\n\t\t".join("%s: %s" % (name, str(self.getControl(name))) for name in self.controls),
             "\n\t\t".join("%s: %s" % (name, str(self.getToggle(name)))  for name in self.toggles),
-            "\n\t\t".join("%s: %s" % (note, notename(self.notes[note]))  for note in self.notes),            
+            "\n\t\t".join("%s: %s" % (note, notename(self.notes[note].n))  for note in self.notes),
         )
 
-    def __init__(self, channel):
-        self.channel = channel
+    def __init__(self, sampler, midi_channel):
+        self.sampler = sampler
+        self.midi_channel = midi_channel
         self.notes = {}
         self.meta = []
         self.program = 0

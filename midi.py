@@ -20,9 +20,11 @@ class SampleProgress:
             errlog("Generated %.1f seconds on channel %i." % (self.second_pos, self.channel))
 
 def perform(q, filename, sample_rate, sample_depth, sample_packing, channel):
-
+    import random
+    global sampler
+    random.seed(a=0)
+    
     p = SampleProgress(sample_rate, channel, 0.1)
-
     
     sampler = SynthSampler(channel, sample_rate, sample_depth, sample_packing)
     zero_sample = sampler.packing.pack(0)
@@ -53,10 +55,10 @@ if __name__ == '__main__':
     sample_rate = 44100
     #sample_rate = 8000
     #sample_rate = 96000
-    sample_depth = 16
-    #sample_depth = 32
-    sample_packing = "h"
-    #sample_packing = "i"
+    #sample_depth = 16
+    sample_depth = 32
+    #sample_packing = "h"
+    sample_packing = "i"
 
     from multiprocessing import Process, Queue
     from collections import deque

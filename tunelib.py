@@ -39,6 +39,7 @@ To deal with sustained notes:
 
 from tonelib import *
 import linearcomma
+from inharmonicity import *
 
 def note2EqualRatio(npo, note):
     return 2 ** (float(note) / npo)    
@@ -108,6 +109,11 @@ def compute_intervals(comma_spread):
 
 class TwelveTuner(BaseTuner):
     def __init__(self, sustain = None, notes_per_octave = 12, min_octaves = 5):
+        if hasattr(self, "stretch_interval"):
+            self.stretch = self.stretch_interval
+        else:
+            self.stretch = 1.0
+        
         if (notes_per_octave == 12):
             BaseTuner.__init__(self, 12)
         else:
@@ -126,11 +132,32 @@ class TwelveTuner(BaseTuner):
                 note -= 12
                 octave_adjust *= 2
                 
-        return self.intervals[note] * octave_adjust
-        
+        return self.intervals[note] * octave_adjust * self.stretch
+
+class StretchTuner(TwelveTuner):
+    A = 415
+
+    # (12 5th / 7 8ths) for one octave == stretch tuning octave interval that aligns with the pythagorean comma
+    stretch_interval = stretch_interval
+
+    intervals = dict([
+       pyth(0, 0, stretch_interval), # 0 C
+       pyth(1, 0, stretch_interval), # 7 G
+       pyth(2, 1, stretch_interval), # 2 D
+       pyth(3, 1, stretch_interval), # 9 A
+       pyth(4, 2, stretch_interval), # 4 E
+       pyth(5, 2, stretch_interval), # 11 B
+       pyth(6, 3, stretch_interval), # 6 F#
+       pyth(7, 4, stretch_interval), # 1 C#
+       pyth(8, 4, stretch_interval), # 8 G#
+       pyth(9, 5, stretch_interval), # 3 D#
+       pyth(10, 5, stretch_interval), # 10 A#
+       pyth(11, 6, stretch_interval), # 5 F
+    ])
+
 
 class EvenTuner(TwelveTuner):
-    A = 440
+    A = 415
     
     # Even Temperament
     # 440 * 2 ** (float(n) / 12)
@@ -331,9 +358,10 @@ class PythagoreanRatio:
         #return float(self) == float(other)
 
 class EqualIntervals:
-    def __init__(self, notes_per_octave = 12, min_octaves = 5):
+    def __init__(self, notes_per_octave = 12, min_octaves = 5, proximity_cents = 5):
         self.npo = float(notes_per_octave)
         self.min_octaves = min_octaves
+        self.proximity_cents = proximity_cents
         self.noteRatios = {}
         self.harmonicNotes = {}
         self.init()
@@ -384,6 +412,9 @@ class EqualIntervals:
             while hd > 0 and not populated:
                 equal_n = ratio2EqualNote(self.npo, PythagoreanRatio(hn, hd))
                 n = int(equal_n + .5)
+                if abs(equal_n - n) * 100 > self.proximity_cents:
+                    hd -= 1
+                    continue
                 
                 self.addRatio(n, PythagoreanRatio(hn, hd))
                 if hd == 1:
@@ -507,16 +538,25 @@ class Tuner:
                 self.ratios = list(reversed(list(self.generate_ratios())))
                 
             return self.ratios
-            
+        
         def noteFrequencies(self):
+            ratios = self.list_ratios()
+            notes = sorted(self.node.tuner.notes)
+            tuned = EvenTuner()
+            tuned.notes = notes
+            bass_note = notes[0]
+
+        
+
+        def noteFrequencies2(self):
             ratios = self.list_ratios()
             notes = sorted(self.node.tuner.notes)
             
             bass_frequency = None
             
             if self.node.tuner.sustain:
-                errlog("sustain")
-                errlog(self.node.tuner.sustain)
+                #errlog("sustain")
+                #errlog(self.node.tuner.sustain)
                 sustained = [
                     (note, f)
                     for note, f
@@ -525,23 +565,23 @@ class Tuner:
                 ]
             else:
                 sustained = None
-            errlog("sustained %s" % (sustained))
+            #errlog("sustained %s" % (sustained))
             if sustained:
                 # notes are sustained
                 # Tune the bass so that the lowest sustained note sustains its pitch
                 lowest_sustained_note, lowest_sustained_f = sustained[0]
-                errlog("lowest_sustained %s" % str(sustained[0]))
+                #errlog("lowest_sustained %s" % str(sustained[0]))
                 bass_ratio = 1.0 / 1.0
-                errlog(ratios)
+                #errlog(ratios)
                 r = [PythagoreanRatio(1, 1)]
                 r.extend(ratios)
                 for ratio, note in zip(r, notes):
-                    errlog("ratio, note = %s, %s" % (str(ratio), str(note)))
+                    #errlog("ratio, note = %s, %s" % (str(ratio), str(note)))
                     bass_ratio = bass_ratio * ratio.n / ratio.d
-                    errlog("bass_ratio = %s" % (str(bass_ratio)))
+                    #errlog("bass_ratio = %s" % (str(bass_ratio)))
                     if lowest_sustained_note == note:
                         bass_frequency = lowest_sustained_f / bass_ratio
-                        errlog("adjusted bass_frequency: %s" % (bass_frequency))
+                        #errlog("adjusted bass_frequency: %s" % (bass_frequency))
                         #if bass_ratio != 1.0:
                         #    import sys
                         #    sys.exit()
@@ -556,8 +596,8 @@ class Tuner:
                 bass_tuner = PythTuner()
                 bass_tuner.C = 256.0
                 bass_tuner.addNote(fundamental)
-                errlog(bass_tuner.noteFrequencies())
-                errlog(fundamental)
+                #errlog(bass_tuner.noteFrequencies())
+                #errlog(fundamental)
                 fundamental_frequency = dict(bass_tuner.noteFrequencies())[fundamental]
                 bass_frequency = fundamental_frequency * bass_d
             
@@ -606,50 +646,50 @@ class Tuner:
                     self.sustainMap = dict(self.sustain)
                     self.sustainCount = len(self.intersectedNotes)
                 
-                errlog("intersectedNotes: %s" % str(self.intersectedNotes))
-                errlog("sustain         : %s" % str(self.sustain))
-                errlog("sustainMap      : %s" % str(self.sustainMap))
+                #errlog("intersectedNotes: %s" % str(self.intersectedNotes))
+                #errlog("sustain         : %s" % str(self.sustain))
+                #errlog("sustainMap      : %s" % str(self.sustainMap))
                 
                 sustainBottom = None
                 if self.sustainCount > 1 and self.child_interval.top in self.intersectedNotes:
                     sustainTop = (self.child_interval.top, self.sustainMap[self.child_interval.top])
-                    errlog("sustainTop      : %s" % str(sustainTop))
+                    #errlog("sustainTop      : %s" % str(sustainTop))
                     for note, f in self.sustain:
                         if note == sustainTop[0]:
                             break
                         else:
                             sustainBottom = (note, f)
-                            errlog("sustainBottom   : %s" % str(sustainBottom))
+                            #errlog("sustainBottom   : %s" % str(sustainBottom))
     
                 if sustainBottom:
                     sustainTopNote, sustainTopFrequency = sustainTop
                     sustainBottomNote, sustainBottomFrequency = sustainBottom
                     sustainRatio = float(sustainTopFrequency) / sustainBottomFrequency
 
-                    errlog("SustainRatio    : %s" % str(sustainRatio))
+                    #errlog("SustainRatio    : %s" % str(sustainRatio))
                     
                     sustainRatioDiff = 1.0
                     bottomInterval = self
                     while bottomInterval and bottomInterval.child_interval and bottomInterval.child_interval.top != sustainBottomNote:
-                        errlog(bottomInterval.child_interval.top)
-                        errlog(bottomInterval.child_interval.bottom)
+                        #errlog(bottomInterval.child_interval.top)
+                        #errlog(bottomInterval.child_interval.bottom)
                         if bottomInterval.ratio:
                             sustainRatioDiff = sustainRatioDiff * bottomInterval.ratio.n / bottomInterval.ratio.d
                         bottomInterval = bottomInterval.parent
-                    errlog("SustainRatioDiff: %s" % str(sustainRatio))
+                    #errlog("SustainRatioDiff: %s" % str(sustainRatio))
                          
                     possibleRatios = []
                     for ratio in self.child_interval.ratios:
-                        errlog(str(float(ratio.n) / ratio.d) + " == " + str(sustainRatio / sustainRatioDiff))
+                        #errlog(str(float(ratio.n) / ratio.d) + " == " + str(sustainRatio / sustainRatioDiff))
                         if float(ratio.n) / ratio.d == sustainRatio / sustainRatioDiff:
                             possibleRatios.append(ratio)
                     
-                    errlog("possibleRatios  : %s" % ", ".join(str(ratio) for ratio in possibleRatios))
+                    #errlog("possibleRatios  : %s" % ", ".join(str(ratio) for ratio in possibleRatios))
                     
                     if not possibleRatios:
                         # this happens when the comma drifts too much -- this helps reset the comma
                         possibleRatios = self.child_interval.ratios
-                        errlog("possibleRatios  : %s" % ", ".join(str(ratio) for ratio in possibleRatios))
+                        #errlog("possibleRatios  : %s" % ", ".join(str(ratio) for ratio in possibleRatios))
                     
                     #import sys
                     #sys.exit()
