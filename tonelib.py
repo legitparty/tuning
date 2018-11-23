@@ -545,13 +545,36 @@ class BlownPipeProperties(SynthProperties):
     attack_cycles  = 7.5
     release_cycles = 3.0
     
-    tonal_dampening = 1.4
-    octave_dampening = 1.0/8
-    octave_modulo = True
+    tonal_dampening = 2.0
+    octave_dampening = 0.0
+    octave_modulo = False
     
     decay_db = 0.0
     harmonic_decay_db = 0.0
     harmonic_decay_dampening = 0.0
+
+class OrganProperties(BlownPipeProperties):
+    tonal_dampening = 1.4
+    octave_dampening = 1.0/8
+    octave_modulo = True
+
+class FlueOrganProperties(OrganProperties):
+    odd_only = False
+
+class ReedOrganProperties(OrganProperties):
+    attack_cycles  = 1.0
+    release_cycles = 1.0
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    odd_only = True
+
+class BrassProperties(OrganProperties):
+    attack_cycles  = 1.0
+    release_cycles = 1.0
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    odd_only = True
+    
 
 class SynthTone(BaseTone):
     synth_id = 0
