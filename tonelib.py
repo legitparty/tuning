@@ -508,8 +508,8 @@ class PluckedStringProperties(SynthProperties):
     initial_gain = 1.0 / 10
     
     max_harmonic = 64
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
-    inharmonicity_dynamic = True
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_3rd_harmonic
+    inharmonicity_dynamic = False
     
     plucked_harmonic = 7.0
     pluck_dampening = 1.0
