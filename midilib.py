@@ -768,10 +768,29 @@ class Note:
 		property_class = PluckedStringProperties
 
 	# 17 - 24 Organ
-	# 73 - 80 Pipe
 	if (
 		(program >= 17 and program <= 24)
-	or	(program >= 74 and program <= 80)
+	):
+		if program >= 20:
+			property_class = ReedOrganProperties
+		else:
+			property_class = FlueOrganProperties
+
+	# 57 - 64 Brass
+ 	if (
+		(program >= 57 and program <= 64)
+	):
+		property_class = BrassProperties
+	# 65 - 72 Reed
+ 	if (
+		(program >= 65 and program <= 72)
+	):
+		property_class = ReedOrganProperties
+ 
+
+	# 73 - 80 Pipe
+	if (
+		(program >= 74 and program <= 80)
 	):
 		property_class = BlownPipeProperties
  
