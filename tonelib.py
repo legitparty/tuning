@@ -300,7 +300,7 @@ class BasePartial:
                 jitter_fade = 0.0
                 
             if jitter_fade > 0:
-                cycle_jitter = rand(second) * self.properties.chiff_cycle
+                cycle_jitter = rand(second * frequency) * self.properties.chiff_cycle
                 
                 jitter = sin(pi * 2 * (self.cycle(second, frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume
             else:
