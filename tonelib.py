@@ -17,15 +17,16 @@ has_clipped = False
 clipping = False
 max_v = 1.0
 
+rand_granularity = 100000
 def init_rand():
     import random
     global entropy
-    entropy = [random.random() for i in range(100000)]
+    entropy = [random.random() for i in range(rand_granularity)]
 
 init_rand()
 
 def rand(second):
-    return entropy[int(second * 1000000) % 100000]
+    return entropy[int(second * rand_granularity) % rand_granularity]
 
 def clipped(v):
     v = abs(v)
@@ -301,7 +302,7 @@ class BasePartial:
             if jitter_fade > 0:
                 cycle_jitter = rand(second) * self.properties.chiff_cycle
                 
-                jitter = sin(pi * 2 * self.cycle(second + cycle_jitter, frequency)) * jitter_fade * self.properties.chiff_volume
+                jitter = sin(pi * 2 * (self.cycle(second, frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume
             else:
                 jitter = 0.0
         else:
@@ -505,7 +506,7 @@ class PluckedStringProperties(SynthProperties):
     chiff_volume = 0.0
     
     odd_only = False
-    initial_gain = 1.0 / 10
+    initial_gain = 1.0 / 50
     
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_3rd_harmonic
@@ -527,8 +528,8 @@ class PluckedStringProperties(SynthProperties):
 
 class BlownPipeProperties(SynthProperties):
     octave_gain = -0.0
-    chiff_cycle = 1.0/384
-    chiff_volume = 5.0/10
+    chiff_cycle = 1.0/5.0
+    chiff_volume = 1.0
     
     odd_only = True
     initial_gain = 1.0 / 5000
@@ -567,12 +568,13 @@ class ReedOrganProperties(OrganProperties):
     chiff_cycle = 0.0
     chiff_volume = 0.0
     odd_only = True
+    inharmonicity_coefficient = 0.0
 
 class BrassProperties(OrganProperties):
-    attack_cycles  = 1.0
+    attack_cycles  = 7.5
     release_cycles = 1.0
-    chiff_cycle = 0.0
-    chiff_volume = 0.0
+    chiff_cycle = 1.0
+    chiff_volume = 3.0
     odd_only = True
     
 
