@@ -293,9 +293,13 @@ class BasePartial:
 
         if self.properties.chiff_volume > 0.0:
             if self.state is self.Attacking:
-                jitter_fade = self.attack_fade.fade_in(second) * self.attack_fade.fade_out(second)
+                jitter_fade = self.attack_fade.fade_in(second) # * self.attack_fade.fade_out(second)
+		jitter_fade = jitter_fade ** 0.5
+		jitter_fade *= (1.0 - jitter_fade)
             elif self.state is self.Releasing:
-                jitter_fade = self.release_fade.fade_in(second) * self.release_fade.fade_out(second)
+                jitter_fade = self.release_fade.fade_in(second) # * self.release_fade.fade_out(second)
+		jitter_fade = jitter_fade ** 0.5
+		jitter_fade *= (1.0 - jitter_fade)
             else:
                 jitter_fade = 0.0
                 
