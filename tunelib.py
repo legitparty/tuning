@@ -127,12 +127,12 @@ class TwelveTuner(BaseTuner):
         while note < 0 or note > 11:
             if note < 0:
                 note += 12
-                octave_adjust /= 2
+                octave_adjust /= (2 * self.stretch)
             elif note > 11:
                 note -= 12
-                octave_adjust *= 2
+                octave_adjust *= (2 * self.stretch)
                 
-        return self.intervals[note] * octave_adjust * self.stretch
+        return self.intervals[note] * octave_adjust
 
 class StretchTuner(TwelveTuner):
     A = 415
