@@ -223,14 +223,18 @@ class BasePartial:
     def hammer_up(self, frequency, second):
         self.state = self.Releasing
         errlog("hammer_up %s %s %s %s" % (frequency, second, id(self), self.state))
-        
-        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.release_cycles / self.base_frequency))
+
+        fade_time = self.properties.chiff_min_valve_time + (self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+
+        self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
 
     def hammer_down(self, frequency, second):
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
         
-        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + self.properties.attack_cycles / self.base_frequency))
+        fade_time = self.properties.chiff_min_valve_time + (self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+        
+        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
         self.sustain = Decay(self.decay_rate, Second(second + self.delay))
         
     def force(self, frequency, second):
@@ -294,19 +298,19 @@ class BasePartial:
         if self.properties.chiff_volume > 0.0:
             if self.state is self.Attacking:
                 jitter_fade = self.attack_fade.fade_in(second) # * self.attack_fade.fade_out(second)
-		jitter_fade = jitter_fade ** 0.5
-		jitter_fade *= (1.0 - jitter_fade)
+                jitter_fade = jitter_fade ** 0.5
+                jitter_fade *= (1.0 - jitter_fade)
             elif self.state is self.Releasing:
                 jitter_fade = self.release_fade.fade_in(second) # * self.release_fade.fade_out(second)
-		jitter_fade = jitter_fade ** 0.5
-		jitter_fade *= (1.0 - jitter_fade)
+                jitter_fade = jitter_fade ** 0.5
+                jitter_fade *= (1.0 - jitter_fade)
             else:
                 jitter_fade = 0.0
                 
             if jitter_fade > 0:
                 cycle_jitter = rand(second * frequency) * self.properties.chiff_cycle
                 
-                jitter = sin(pi * 2 * (self.cycle(second, frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume
+                jitter = sin(pi * 2 * (self.cycle(second, frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume * self.base_frequency / 440
             else:
                 jitter = 0.0
         else:
@@ -506,21 +510,21 @@ class SynthProperties:
 
 class PluckedStringProperties(SynthProperties):
     octave_gain = -0.0
+    
     chiff_cycle = 0.0
     chiff_volume = 0.0
+    chiff_min_valve_time = 0.0
+    chiff_max_valve_time = 0.0
     
     odd_only = False
     initial_gain = 1.0 / 50
     
     max_harmonic = 64
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_3rd_harmonic
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
     inharmonicity_dynamic = False
     
     plucked_harmonic = 7.0
     pluck_dampening = 1.0
-    
-    attack_cycles = 1.0
-    release_cycles = 1.0
     
     tonal_dampening = 1.1
     octave_dampening = 0.025
@@ -530,10 +534,30 @@ class PluckedStringProperties(SynthProperties):
     harmonic_decay_db = 1.0
     harmonic_decay_dampening = 0.0
 
+class InharmonicStringProperties(PluckedStringProperties):
+    # http://daffy.uah.edu/piano/page4/page3/index.html
+    inharmonicity_dynamic = True
+    
+    inharmonicity_coefficient_func = lambda x, a, b, c, d, e: a + b * x + c * x * x + (d / x) + (e / (x * x))
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        return self.inharmonicity_coefficient_func(float(frequency), self.a, self.b, self.c, self.d, self.e)
+
+class Steinway(InharmonicStringProperties):
+    # empirical inharmonicity model for Steinway B
+    a = 5.22964e-6
+    b = 1.21012e-6
+    c = 8.3666e-10
+    d = -0.007927
+    e = 0.429601
+
 class BlownPipeProperties(SynthProperties):
     octave_gain = -0.0
+    
     chiff_cycle = 1.0/5.0
     chiff_volume = 1.0
+    chiff_min_valve_time = 0.05
+    chiff_max_valve_time = 0.3
     
     odd_only = True
     initial_gain = 1.0 / 5000
@@ -546,9 +570,6 @@ class BlownPipeProperties(SynthProperties):
     
     plucked_harmonic = 1000.0
     pluck_dampening = 1.0
-    
-    attack_cycles  = 7.5
-    release_cycles = 3.0
     
     tonal_dampening = 2.0
     octave_dampening = 0.0
@@ -567,18 +588,18 @@ class FlueOrganProperties(OrganProperties):
     odd_only = False
 
 class ReedOrganProperties(OrganProperties):
-    attack_cycles  = 1.0
-    release_cycles = 1.0
     chiff_cycle = 0.0
     chiff_volume = 0.0
+    chiff_min_valve_time = 0.0
+    chiff_max_vavle_time = 0.0
     odd_only = True
     inharmonicity_coefficient = 0.0
 
 class BrassProperties(OrganProperties):
-    attack_cycles  = 7.5
-    release_cycles = 1.0
     chiff_cycle = 1.0
     chiff_volume = 3.0
+    chiff_min_valve_time = 0.05
+    chiff_min_valve_time = 0.15
     odd_only = True
     
 
@@ -629,7 +650,7 @@ class SynthTone(BaseTone):
         self.panning = panning
         self.nyquist = nyquist
         self.audio_channel = audio_channel
-	self.midi_channel = midi_channel
+        self.midi_channel = midi_channel
         self.start = start
         self.stop = stop
         self.property_class = property_class
@@ -654,6 +675,9 @@ class SynthTone(BaseTone):
         volume = 0.0
         max_partials = int(float(self.nyquist) / self.frequency)
         for harmonic in range(1, max_partials):
+            if self.properties.inharmonicity_dynamic:
+                self.properties.inharmonicity_coefficient = self.inharmonicity_coefficient_for_frequency(frequency)
+            
             if self.properties.inharmonicity_coefficient > 0.0:
                 harmonic_frequency = self.frequency * harmonic * (1.0 + 0.5 * (harmonic ** 2 - 1) * self.properties.inharmonicity_coefficient)
             else:
