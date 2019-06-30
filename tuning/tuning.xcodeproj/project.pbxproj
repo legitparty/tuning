@@ -9,7 +9,7 @@
 /* Begin PBXFileReference section */
 		B5CAB2F0217C3DEC003241EB /* reverb.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = reverb.sh; path = ../reverb.sh; sourceTree = "<group>"; };
 		B5CAB2F1217C3DEC003241EB /* linearcomma.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = linearcomma.py; path = ../linearcomma.py; sourceTree = "<group>"; };
-		B5CAB2F2217C3DEC003241EB /* tonelib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tonelib.py; path = ../tonelib.py; sourceTree = "<group>"; };
+		B5CAB2F2217C3DEC003241EB /* tonelib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tonelib.py; path = ../tonelib.py; sourceTree = "<group>"; usesTabs = 0; wrapsLines = 1; };
 		B5CAB2F3217C3DEC003241EB /* patches.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = patches.py; path = ../patches.py; sourceTree = "<group>"; };
 		B5CAB2F4217C3DEC003241EB /* tunelib.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tunelib.py; path = ../tunelib.py; sourceTree = "<group>"; };
 		B5CAB2F5217C3DEC003241EB /* tone.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = tone.py; path = ../tone.py; sourceTree = "<group>"; };
