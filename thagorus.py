@@ -1,10 +1,18 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from math import log
+from math import log, gcd
+
+
+r      = lambda n, d: (n // gcd(n, d), d // gcd(n, d)) # reduce fraction
+lcd    = lambda n, d: r(n, d)[1] # least common denominator
+cycles = lambda n   : [(i, lcd(i, n)) for i in range(n) if lcd(i, n) == n] # note coverage in cycles in scale of size n
+
 
 class Sphere:
   def __init__(self, base = 12):
     self.base = base
+
+    self.cycles = cycles(self.base)
 
     self.intervals = Intervals(self)
 
@@ -98,9 +106,10 @@ for b in range(2, base + 1):
 bases.sort(key = lambda sphere: sphere.intervals.dissonance)
 
 for s in bases:
-  print "-" * 79
-  print "Base: %i" % s.base
-  print "Dissnonance: %f" % s.intervals.dissonance
-  print
-  print "Note\tratio\tinterval\toffset"
-  print str(s.intervals)
+  print("-" * 79)
+  print("Base: %i" % s.base)
+  print("Cycles: %i" % len(s.cycles))
+  print("Dissnonance: %f" % s.intervals.dissonance)
+  print()
+  print("Note\tratio\tinterval\toffset")
+  print(str(s.intervals))
