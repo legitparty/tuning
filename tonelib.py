@@ -491,10 +491,10 @@ class SynthProperties:
     def harmonic_volume(self, harmonic):
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
-	    
-	if self.odd_only and harmonic % 2 != 1:
-		return 0.0
-	    
+    
+        if self.odd_only and harmonic % 2 != 1:
+            return 0.0
+    
         return (
             self.gain
                 # attack
