@@ -24,3 +24,20 @@ pyth_r = lambda v, o, stretch_interval: (1.5 ** v) / (2.0 * stretch_interval) **
 pyth   = lambda v, o, stretch_interval: (pyth_n(v, o), pyth_r(v, o, stretch_interval))
 
 
+def stretch_temperament(stretch_interval):
+    return dict([
+       pyth(0, 0, stretch_interval), # 0 C
+       pyth(1, 0, stretch_interval), # 7 G
+       pyth(2, 1, stretch_interval), # 2 D
+       pyth(3, 1, stretch_interval), # 9 A
+       pyth(4, 2, stretch_interval), # 4 E
+       pyth(5, 2, stretch_interval), # 11 B
+       pyth(6, 3, stretch_interval), # 6 F#
+       pyth(7, 4, stretch_interval), # 1 C#
+       pyth(8, 4, stretch_interval), # 8 G#
+       pyth(9, 5, stretch_interval), # 3 D#
+       pyth(10, 5, stretch_interval), # 10 A#
+       pyth(11, 6, stretch_interval), # 5 F
+    ])
+
+
