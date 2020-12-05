@@ -5,7 +5,9 @@ from math import log, gcd
 
 r      = lambda n, d: (n // gcd(n, d), d // gcd(n, d)) # reduce fraction
 lcd    = lambda n, d: r(n, d)[1] # least common denominator
-cycles = lambda n   : [(i, lcd(i, n)) for i in range(n) if lcd(i, n) == n] # note coverage in cycles in scale of size n
+coprime = lambda i, n: lcd(i, n) == n
+coprime2 = lambda i, n: gcd(i, n) == 1
+cycles = lambda n   : [(i, lcd(i, n)) for i in range(n) if coprime(i, n)] # note coverage in cycles in scale of size n
 
 
 class Sphere:
@@ -81,6 +83,8 @@ class Interval:
     self.note = int(self.interval + 0.5)
     self.note_ratio = 2.0 ** (int(self.note) / float(self.sphere.base))
     self.distance = abs(self.interval - self.note)
+    self.comma = (self.numerator ** self.sphere.base) / (self.denominator ** self.sphere.base * 2 ** self.note)
+    self.comma_distance = self.comma if self.comma > 1 else 1 / self.comma
     self.offset = (
       440.0 * self.note_ratio
     ) - (
@@ -88,11 +92,14 @@ class Interval:
     )
 
   def __str__(self):
-    return "%i\t%i/%i\t%f\t%f" % (
+    return "%i\t%i/%i\t%r\t%f\t%f\t%f\t%f" % (
       self.note, 
       self.numerator, 
       self.denominator, 
-      self.interval, 
+      coprime2(self.note, self.sphere.base),
+      self.interval,
+      self.comma,
+      self.comma_distance,
       self.offset
     )
 
@@ -111,5 +118,5 @@ for s in bases:
   print("Cycles: %i" % len(s.cycles))
   print("Dissnonance: %f" % s.intervals.dissonance)
   print()
-  print("Note\tratio\tinterval\toffset")
+  print("Note\tratio\tcoprime\tinterval\tcomma\tcomma-dist\toffset")
   print(str(s.intervals))
