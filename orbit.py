@@ -12,21 +12,21 @@ def main():
     n_d = mpf(1)
     d = mpf(1)
     lowest_i = 0
-    lowest_dist = 1.0
+    lowest_dist = mpf(2)
     while True:
         n *= 3
         n_d *= 2
         r = n / (n_d * d)
-        if r > 2:
+        if r > 1.5:
             j += 1
             d *= 2
             r = n / (n_d * d)
 
-        dist = abs(r - 1.0)
+        dist = r if r >= 1.0 else mpf(1) / r
+
         if dist < lowest_dist:
             lowest_dist = dist
-            print()
-            print(i, j, r, dist)
+            print("%r\t%r\t%r\t%r" % (i, j, r, dist))
 
         i += 1
 
