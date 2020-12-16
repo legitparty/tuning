@@ -12,7 +12,7 @@ except ImportError:
 
 def comma(p_n, p_d, n, d):
     try:
-        return p_n ** n / (p_d ** n * mpf(2) ** d)
+        return mpf(p_n) ** mpf(n) / (mpf(p_d) ** mpf(n) * mpf(2) ** mpf(d))
     except OverflowError:
         return None
 
@@ -20,15 +20,22 @@ def main():
     from sys import argv
     args = dict(enumerate(argv))
 
-    p_n = mpf(int(args.get(1, "3")))
-    p_d = mpf(int(args.get(2, "2")))
+    if args.get(4, None):
+        from math import log as l
+        f = lambda x: float(x)
+    else:
+        f = mpf
+        l = log
+
+    p_n = f(int(args.get(1, "3")))
+    p_d = f(int(args.get(2, "2")))
     limit = int(args.get(3, "0"))
-    target = log(p_n / p_d, 2)
+    target = l(p_n / p_d, 2)
     #print(target)
-    lowest_dist = mpf(2.0)
+    lowest_dist = f(2.0)
 
     def candidates():
-        n = mpf(1)
+        n = f(1)
         while limit == 0 or n <= limit:
             n += 1
             target_d = n * target
