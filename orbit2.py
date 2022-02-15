@@ -2,11 +2,11 @@
 
 try:
     from mpmath import *
-    mp.dps = 100
+    mp.dps = 30
     mp.pretty = True
     slow = True
 except ImportError:
-    mpf = lambda x: float(x)
+    mpf = float#lambda x: float(x)
     from math import log
     slow = False
 
@@ -51,7 +51,7 @@ def main():
         dist = r / target if r > target else target / r
         if dist < lowest_dist:
             lowest_dist = dist
-            print("%r\t%r\t%r" % (int(n), d, comma(p_n, p_d, n, d)))
+            print("%r\t%r\t%r\t%r" % (int(n), d, comma(p_n, p_d, n, d), dist))
 
 
 
